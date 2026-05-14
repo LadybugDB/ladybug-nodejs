@@ -26,6 +26,7 @@ class Database {
    * the error occured.
    * @param {Boolean} enableChecksums If true, the database will use checksums to detect corruption in the
    * WAL file.
+   * @param {Boolean} enableDefaultHashIndex If true, node tables create the default primary-key hash index.
    */
   constructor(
     databasePath,
@@ -37,6 +38,7 @@ class Database {
     checkpointThreshold = -1,
     throwOnWalReplayFailure = true,
     enableChecksums = true,
+    enableDefaultHashIndex = true,
   ) {
     if (!databasePath) {
       databasePath = ":memory:";
@@ -65,7 +67,8 @@ class Database {
       autoCheckpoint,
       checkpointThreshold,
       throwOnWalReplayFailure,
-      enableChecksums
+      enableChecksums,
+      enableDefaultHashIndex
     );
     this._isInitialized = false;
     this._initPromise = null;

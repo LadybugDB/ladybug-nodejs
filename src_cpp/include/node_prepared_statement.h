@@ -20,6 +20,7 @@ private:
     Napi::Value InitSync(const Napi::CallbackInfo& info);
     void InitCppPreparedStatement();
     Napi::Value IsSuccess(const Napi::CallbackInfo& info);
+    Napi::Value IsReadOnly(const Napi::CallbackInfo& info);
     Napi::Value GetErrorMessage(const Napi::CallbackInfo& info);
 
 private:

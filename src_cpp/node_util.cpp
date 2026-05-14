@@ -1,11 +1,132 @@
 #include "include/node_util.h"
 
 #include "common/exception/exception.h"
+#include "common/constants.h"
 #include "common/types/value/nested.h"
 #include "common/types/value/node.h"
 #include "common/types/value/recursive_rel.h"
 #include "common/types/value/rel.h"
 #include "common/types/value/value.h"
+
+namespace {
+
+bool IsEmptyNestedWithAny(const Value& value) {
+    if (!value.getDataType().containsAny()) {
+        return false;
+    }
+    switch (value.getDataType().getPhysicalType()) {
+    case PhysicalTypeID::LIST:
+    case PhysicalTypeID::ARRAY:
+    case PhysicalTypeID::STRUCT:
+        return NestedVal::getChildrenSize(const_cast<Value*>(&value)) == 0;
+    default:
+        return false;
+    }
+}
+
+bool TryGetMaxParameterType(const LogicalType& left, const LogicalType& right,
+    LogicalType& result) {
+    if (left.getLogicalTypeID() == LogicalTypeID::STRING ||
+        right.getLogicalTypeID() == LogicalTypeID::STRING) {
+        result = LogicalType::STRING();
+        return true;
+    }
+    return LogicalTypeUtils::tryGetMaxLogicalType(left, right, result);
+}
+
+bool CanCopyValueForNested(const Value& value, const LogicalType& targetType) {
+    if (value.getDataType() == targetType) {
+        return true;
+    }
+    if (value.isNull() && value.getDataType().getLogicalTypeID() == LogicalTypeID::ANY) {
+        return true;
+    }
+    if (IsEmptyNestedWithAny(value)) {
+        return true;
+    }
+    if (targetType.getLogicalTypeID() == LogicalTypeID::STRING ||
+        targetType.getLogicalTypeID() == LogicalTypeID::DOUBLE ||
+        targetType.getLogicalTypeID() == LogicalTypeID::FLOAT) {
+        return true;
+    }
+    return value.getDataType().getLogicalTypeID() == targetType.getLogicalTypeID() &&
+           value.getDataType().containsAny();
+}
+
+std::unique_ptr<Value> CopyValueForNested(const Value& value, const LogicalType& targetType) {
+    if (value.isNull() && value.getDataType().getLogicalTypeID() == LogicalTypeID::ANY) {
+        return std::make_unique<Value>(Value::createNullValue(targetType));
+    }
+    if (value.getDataType() != targetType && IsEmptyNestedWithAny(value)) {
+        return std::make_unique<Value>(Value::createDefaultValue(targetType));
+    }
+    if (value.getDataType() != targetType &&
+        targetType.getLogicalTypeID() == LogicalTypeID::STRING) {
+        return std::make_unique<Value>(Value::createValue<std::string>(value.toString()));
+    }
+    if (value.getDataType() != targetType &&
+        targetType.getLogicalTypeID() == LogicalTypeID::DOUBLE) {
+        return std::make_unique<Value>(std::stod(value.toString()));
+    }
+    if (value.getDataType() != targetType &&
+        targetType.getLogicalTypeID() == LogicalTypeID::FLOAT) {
+        return std::make_unique<Value>(static_cast<float>(std::stof(value.toString())));
+    }
+    if (value.getDataType() != targetType &&
+        value.getDataType().getLogicalTypeID() == LogicalTypeID::LIST &&
+        targetType.getLogicalTypeID() == LogicalTypeID::LIST) {
+        std::vector<std::unique_ptr<Value>> children;
+        const auto& childType = ListType::getChildType(targetType);
+        for (auto i = 0u; i < NestedVal::getChildrenSize(const_cast<Value*>(&value)); ++i) {
+            children.push_back(CopyValueForNested(
+                *NestedVal::getChildVal(const_cast<Value*>(&value), i), childType));
+        }
+        return std::make_unique<Value>(targetType.copy(), std::move(children));
+    }
+    if (value.getDataType() != targetType &&
+        value.getDataType().getLogicalTypeID() == LogicalTypeID::MAP &&
+        targetType.getLogicalTypeID() == LogicalTypeID::MAP) {
+        std::vector<std::unique_ptr<Value>> children;
+        const auto& keyType = MapType::getKeyType(targetType);
+        const auto& valueType = MapType::getValueType(targetType);
+        for (auto i = 0u; i < NestedVal::getChildrenSize(const_cast<Value*>(&value)); ++i) {
+            auto* mapEntry = NestedVal::getChildVal(const_cast<Value*>(&value), i);
+            std::vector<StructField> fields;
+            fields.emplace_back(InternalKeyword::MAP_KEY, keyType.copy());
+            fields.emplace_back(InternalKeyword::MAP_VALUE, valueType.copy());
+            std::vector<std::unique_ptr<Value>> structValues;
+            structValues.push_back(
+                CopyValueForNested(*NestedVal::getChildVal(mapEntry, 0), keyType));
+            structValues.push_back(
+                CopyValueForNested(*NestedVal::getChildVal(mapEntry, 1), valueType));
+            children.push_back(std::make_unique<Value>(LogicalType::STRUCT(std::move(fields)),
+                std::move(structValues)));
+        }
+        return std::make_unique<Value>(targetType.copy(), std::move(children));
+    }
+    return value.copy();
+}
+
+bool IsLbugJsonWrapper(Napi::Object object) {
+    auto marker = object.Get("_lbugType");
+    return marker.IsString() && marker.ToString().Utf8Value() == "JSON";
+}
+
+bool IsMap(Napi::Object object) {
+    auto env = object.Env();
+    auto mapCtor = env.Global().Get("Map");
+    return mapCtor.IsFunction() && object.InstanceOf(mapCtor.As<Napi::Function>());
+}
+
+Napi::Array MapEntries(Napi::Object map) {
+    auto env = map.Env();
+    auto entries = map.Get("entries").As<Napi::Function>().Call(map, {});
+    auto arrayCtor = env.Global().Get("Array").As<Napi::Object>();
+    auto from = arrayCtor.Get("from").As<Napi::Function>();
+    return from.Call(arrayCtor, {entries}).As<Napi::Array>();
+}
+
+} // namespace
 
 Napi::Value Util::ConvertToNapiObject(const Value& value, Napi::Env env) {
     if (value.isNull()) {
@@ -242,14 +363,32 @@ Value Util::TransformNapiValue(Napi::Value napiValue) {
         auto napiArray = napiValue.As<Napi::Array>();
         auto size = napiArray.Length();
         if (size == 0) {
-            return Value::createNullValue();
+            return Value(LogicalType::LIST(LogicalType::ANY()),
+                std::vector<std::unique_ptr<Value>>{});
         }
         std::vector<std::unique_ptr<Value>> children;
+        auto type = TransformNapiValue(napiArray.Get(uint32_t(0))).getDataType().copy();
         for (size_t i = 0; i < size; ++i) {
-            children.push_back(std::make_unique<Value>(TransformNapiValue(napiArray.Get(i))));
+            auto child = TransformNapiValue(napiArray.Get(i));
+            LogicalType resultType;
+            if (!TryGetMaxParameterType(type, child.getDataType(), resultType)) {
+                throw Exception("Cannot convert JavaScript array to Lbug list: incompatible " +
+                                type.toString() + " and " + child.getDataType().toString());
+            }
+            type = std::move(resultType);
+            children.push_back(std::make_unique<Value>(std::move(child)));
         }
-        auto dataType = LogicalType::LIST(children[0]->getDataType().copy());
-        return Value(std::move(dataType), std::move(children));
+        std::vector<std::unique_ptr<Value>> copiedChildren;
+        copiedChildren.reserve(children.size());
+        for (auto& child : children) {
+            if (!CanCopyValueForNested(*child, type)) {
+                throw Exception("Cannot convert JavaScript array to Lbug list: incompatible " +
+                                child->getDataType().toString() + " and " + type.toString());
+            }
+            copiedChildren.push_back(CopyValueForNested(*child, type));
+        }
+        auto dataType = LogicalType::LIST(type.copy());
+        return Value(std::move(dataType), std::move(copiedChildren));
     }
     if (napiValue.IsBoolean()) {
         return Value(napiValue.ToBoolean().Value());
@@ -289,6 +428,56 @@ Value Util::TransformNapiValue(Napi::Value napiValue) {
     }
     if (napiValue.IsObject()) {
         auto napiObject = napiValue.As<Napi::Object>();
+        if (IsLbugJsonWrapper(napiObject)) {
+            auto jsonValue = napiObject.Get("value");
+            if (!jsonValue.IsString()) {
+                throw Exception("JSON parameter value must be a string.");
+            }
+            return Value(LogicalType::JSON(), jsonValue.ToString().Utf8Value());
+        }
+        if (IsMap(napiObject)) {
+            auto entries = MapEntries(napiObject);
+            if (entries.Length() == 0) {
+                return Value(LogicalType::MAP(LogicalType::ANY(), LogicalType::ANY()),
+                    std::vector<std::unique_ptr<Value>>{});
+            }
+            std::vector<std::unique_ptr<Value>> keys;
+            std::vector<std::unique_ptr<Value>> values;
+            auto firstEntry = entries.Get(uint32_t(0)).As<Napi::Array>();
+            auto keyType = TransformNapiValue(firstEntry.Get(uint32_t(0))).getDataType().copy();
+            auto valueType = TransformNapiValue(firstEntry.Get(uint32_t(1))).getDataType().copy();
+            for (auto i = 0u; i < entries.Length(); ++i) {
+                auto entry = entries.Get(i).As<Napi::Array>();
+                auto key = TransformNapiValue(entry.Get(uint32_t(0)));
+                auto val = TransformNapiValue(entry.Get(uint32_t(1)));
+                LogicalType resultKeyType;
+                LogicalType resultValueType;
+                if (!TryGetMaxParameterType(keyType, key.getDataType(), resultKeyType) ||
+                    !TryGetMaxParameterType(valueType, val.getDataType(), resultValueType)) {
+                    throw Exception("Cannot convert JavaScript Map to Lbug map.");
+                }
+                keyType = std::move(resultKeyType);
+                valueType = std::move(resultValueType);
+                keys.push_back(std::make_unique<Value>(std::move(key)));
+                values.push_back(std::make_unique<Value>(std::move(val)));
+            }
+            std::vector<std::unique_ptr<Value>> children;
+            for (auto i = 0u; i < keys.size(); ++i) {
+                if (!CanCopyValueForNested(*keys[i], keyType) ||
+                    !CanCopyValueForNested(*values[i], valueType)) {
+                    throw Exception("Cannot convert JavaScript Map to Lbug map.");
+                }
+                std::vector<StructField> fields;
+                fields.emplace_back(InternalKeyword::MAP_KEY, keyType.copy());
+                fields.emplace_back(InternalKeyword::MAP_VALUE, valueType.copy());
+                std::vector<std::unique_ptr<Value>> structValues;
+                structValues.push_back(CopyValueForNested(*keys[i], keyType));
+                structValues.push_back(CopyValueForNested(*values[i], valueType));
+                children.push_back(std::make_unique<Value>(LogicalType::STRUCT(std::move(fields)),
+                    std::move(structValues)));
+            }
+            return Value(LogicalType::MAP(keyType.copy(), valueType.copy()), std::move(children));
+        }
         std::vector<std::unique_ptr<Value>> children;
         auto struct_fields = std::vector<StructField>{};
         auto childrenNames = napiObject.GetPropertyNames();

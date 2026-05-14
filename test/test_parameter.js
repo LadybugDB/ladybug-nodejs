@@ -187,6 +187,17 @@ describe("STRING", function () {
   });
 });
 
+describe("JSON", function () {
+  it("should transform wrapped values as JSON parameters", async function () {
+    const preparedStatement = await conn.prepare("RETURN $1");
+    const queryResult = await conn.execute(preparedStatement, {
+      1: lbug.json({ name: "Alice" }),
+    });
+    const result = await queryResult.getAll();
+    assert.deepEqual(result[0]["$1"], { name: "Alice" });
+  });
+});
+
 describe("DATE", function () {
   it("should transform date as DATE parameter", async function () {
     const preparedStatement = await conn.prepare(
@@ -339,15 +350,48 @@ describe("LIST", function () {
     assert.deepEqual(result[0]["$1"], [[1, 2], [3, 4], [5, 6]]);
   });
 
-  it("should transform empty list as LIST parameter as null", async function () {
+  it("should transform empty list as LIST parameter", async function () {
     const preparedStatement = await conn.prepare(
-      "RETURN $1"
+      "RETURN CAST($1, 'INT64[]') AS list"
     );
     const queryResult = await conn.execute(preparedStatement, {
       1: [],
     });
     const result = await queryResult.getAll();
-    assert.deepEqual(result[0]["$1"], null);
+    assert.deepEqual(result[0]["list"], []);
+  });
+
+  it("should transform list with nulls as LIST parameter", async function () {
+    const preparedStatement = await conn.prepare(
+      "RETURN $1"
+    );
+    const queryResult = await conn.execute(preparedStatement, {
+      1: [null, 123],
+    });
+    const result = await queryResult.getAll();
+    assert.deepEqual(result[0]["$1"], [null, 123]);
+  });
+
+  it("should widen mixed list elements to STRING parameters", async function () {
+    const preparedStatement = await conn.prepare(
+      "RETURN $1"
+    );
+    const queryResult = await conn.execute(preparedStatement, {
+      1: [123, "abcdefg"],
+    });
+    const result = await queryResult.getAll();
+    assert.deepEqual(result[0]["$1"], ["123", "abcdefg"]);
+  });
+
+  it("should transform Map as MAP parameter", async function () {
+    const preparedStatement = await conn.prepare(
+      "RETURN $1"
+    );
+    const queryResult = await conn.execute(preparedStatement, {
+      1: new Map([["one", 1], ["two", null]]),
+    });
+    const result = await queryResult.getAll();
+    assert.deepEqual(result[0]["$1"], { one: 1, two: null });
   });
 });
 

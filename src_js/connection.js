@@ -321,6 +321,72 @@ class Connection {
   }
 
   /**
+   * Create an Arrow memory-backed node table from Arrow C Data Interface pointers.
+   * Ownership of the schema and arrays is transferred to Ladybug.
+   * @param {String} tableName the node table name to create.
+   * @param {BigInt|External} schemaPtr pointer to an ArrowSchema.
+   * @param {BigInt|External|Array<BigInt|External>} arraysPtr pointer to contiguous ArrowArray objects, or an array of ArrowArray pointers.
+   * @param {Number} numArrays number of ArrowArray batches when arraysPtr is contiguous.
+   * @returns {lbug.QueryResult} the table creation query result.
+   */
+  createArrowTableSync(tableName, schemaPtr, arraysPtr, numArrays = 1) {
+    if (typeof tableName !== "string") {
+      throw new Error("tableName must be a string.");
+    }
+    if (!Array.isArray(arraysPtr) && (typeof numArrays !== "number" || numArrays <= 0)) {
+      throw new Error("numArrays must be a positive number.");
+    }
+    const connection = this._getConnectionSync();
+    const nodeQueryResult = new LbugNative.NodeQueryResult();
+    connection.createArrowTableSync(tableName, schemaPtr, arraysPtr, numArrays, nodeQueryResult);
+    return new QueryResult(this, nodeQueryResult);
+  }
+
+  /**
+   * Create an Arrow memory-backed relationship table from Arrow C Data Interface pointers.
+   * The Arrow table must contain endpoint columns named "from" and "to".
+   * Ownership of the schema and arrays is transferred to Ladybug.
+   */
+  createArrowRelTableSync(tableName, srcTableName, dstTableName, schemaPtr, arraysPtr, numArrays = 1) {
+    if (typeof tableName !== "string") {
+      throw new Error("tableName must be a string.");
+    }
+    if (typeof srcTableName !== "string" || typeof dstTableName !== "string") {
+      throw new Error("srcTableName and dstTableName must be strings.");
+    }
+    if (!Array.isArray(arraysPtr) && (typeof numArrays !== "number" || numArrays <= 0)) {
+      throw new Error("numArrays must be a positive number.");
+    }
+    const connection = this._getConnectionSync();
+    const nodeQueryResult = new LbugNative.NodeQueryResult();
+    connection.createArrowRelTableSync(
+      tableName,
+      srcTableName,
+      dstTableName,
+      schemaPtr,
+      arraysPtr,
+      numArrays,
+      nodeQueryResult
+    );
+    return new QueryResult(this, nodeQueryResult);
+  }
+
+  /**
+   * Drop an Arrow memory-backed table and unregister its Arrow data.
+   * @param {String} tableName the Arrow table name.
+   * @returns {lbug.QueryResult} the drop query result.
+   */
+  dropArrowTableSync(tableName) {
+    if (typeof tableName !== "string") {
+      throw new Error("tableName must be a string.");
+    }
+    const connection = this._getConnectionSync();
+    const nodeQueryResult = new LbugNative.NodeQueryResult();
+    connection.dropArrowTableSync(tableName, nodeQueryResult);
+    return new QueryResult(this, nodeQueryResult);
+  }
+
+  /**
    * Internal function to get the next query result for multiple query results.
    * @param {LbugNative.NodeQueryResult} nodeQueryResult the current node query result.
    * @returns {Promise<lbug.QueryResult>} a promise that resolves to the next query result. The promise is rejected if there is an error.

@@ -210,6 +210,37 @@ describe("Database constructor", function () {
     testDb.close();
   });
 
+  it("should create a database with default hash indexes disabled", async function () {
+    const tmpDbPath = await new Promise((resolve, reject) => {
+      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
+        if (err) {
+          return reject(err);
+        }
+        return resolve(path);
+      });
+    });
+    const dbPath = path.join(tmpDbPath, "db.lbdb");
+    const testDb = new lbug.Database(
+      dbPath,
+      1 << 28,
+      true,
+      false,
+      1 << 30,
+      true,
+      -1,
+      true,
+      true,
+      false
+    );
+    const testConn = new lbug.Connection(testDb);
+    const res = await testConn.query("CALL current_setting('enable_default_hash_index') RETURN *");
+    const tuple = await res.getNext();
+    assert.equal(tuple["enable_default_hash_index"], "False");
+    res.close();
+    await testConn.close();
+    await testDb.close();
+  });
+
   it("should create a database in read-only mode", async function () {
     const tmpDbPath = await new Promise((resolve, reject) => {
       tmp.dir({ unsafeCleanup: true }, (err, path, _) => {

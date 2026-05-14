@@ -31,6 +31,14 @@ class PreparedStatement {
   }
 
   /**
+   * Check if the prepared statement only performs read operations.
+   * @returns {Boolean} true if the prepared statement is read-only.
+   */
+  isReadOnly() {
+    return this._preparedStatement.isReadOnly();
+  }
+
+  /**
    * Get the error message if the prepared statement is not successfully prepared.
    * @returns {String} the error message.
    */

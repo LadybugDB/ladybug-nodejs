@@ -23,6 +23,13 @@ export type ProgressCallback = (
 ) => void;
 
 /**
+ * Low-level pointer to an Arrow C Data Interface struct.
+ * Native producers can pass N-API External values; JavaScript callers that have
+ * raw addresses can pass them as bigint.
+ */
+export type NativePointer = bigint | object;
+
+/**
  * Represents a node ID in the graph database.
  */
 export interface NodeID {
@@ -84,6 +91,7 @@ export type LbugValue =
     | RelValue
     | RecursiveRelValue
     | LbugValue[]
+    | Map<LbugValue, LbugValue>
     | { [key: string]: LbugValue };
 
 /**
@@ -102,7 +110,14 @@ export interface SystemConfig {
     autoCheckpoint?: boolean;
     /** Threshold for automatic checkpoints */
     checkpointThreshold?: number;
+    /** Whether node tables create the default primary-key hash index */
+    enableDefaultHashIndex?: boolean;
 }
+
+/**
+ * Wrap a string or JavaScript value as a JSON-typed query parameter.
+ */
+export function json(value: string | LbugValue): LbugValue;
 
 /**
  * Represents a Lbug database instance.
@@ -117,6 +132,9 @@ export class Database {
      * @param maxDBSize Maximum size of the database in bytes
      * @param autoCheckpoint Whether to enable automatic checkpoints
      * @param checkpointThreshold Threshold for automatic checkpoints
+     * @param throwOnWalReplayFailure Whether WAL replay failures should throw
+     * @param enableChecksums Whether checksum validation is enabled
+     * @param enableDefaultHashIndex Whether node tables create the default primary-key hash index
      */
     constructor(
         databasePath?: string,
@@ -125,7 +143,10 @@ export class Database {
         readOnly?: boolean,
         maxDBSize?: number,
         autoCheckpoint?: boolean,
-        checkpointThreshold?: number
+        checkpointThreshold?: number,
+        throwOnWalReplayFailure?: boolean,
+        enableChecksums?: boolean,
+        enableDefaultHashIndex?: boolean
     );
 
     /**
@@ -266,6 +287,36 @@ export class Connection {
      * @returns The query result(s)
      */
     querySync(statement: string): QueryResult | QueryResult[];
+
+    /**
+     * Create an Arrow memory-backed node table from Arrow C Data Interface pointers.
+     * Ownership of schemaPtr and arraysPtr is transferred to Ladybug.
+     */
+    createArrowTableSync(
+        tableName: string,
+        schemaPtr: NativePointer,
+        arraysPtr: NativePointer | NativePointer[],
+        numArrays?: number
+    ): QueryResult;
+
+    /**
+     * Create an Arrow memory-backed relationship table from Arrow C Data Interface pointers.
+     * The Arrow table must contain endpoint columns named "from" and "to".
+     * Ownership of schemaPtr and arraysPtr is transferred to Ladybug.
+     */
+    createArrowRelTableSync(
+        tableName: string,
+        srcTableName: string,
+        dstTableName: string,
+        schemaPtr: NativePointer,
+        arraysPtr: NativePointer | NativePointer[],
+        numArrays?: number
+    ): QueryResult;
+
+    /**
+     * Drop an Arrow memory-backed table and unregister its Arrow data.
+     */
+    dropArrowTableSync(tableName: string): QueryResult;
 }
 
 /**
@@ -278,6 +329,12 @@ export class PreparedStatement {
      * @returns True if preparation was successful
      */
     isSuccess(): boolean;
+
+    /**
+     * Check if the statement only performs read operations.
+     * @returns True if the prepared statement is read-only
+     */
+    isReadOnly(): boolean;
 
     /**
      * Get the error message if preparation failed.
@@ -392,6 +449,7 @@ declare const lbug: {
     Connection: typeof Connection;
     PreparedStatement: typeof PreparedStatement;
     QueryResult: typeof QueryResult;
+    json: typeof json;
     VERSION: string;
     STORAGE_VERSION: bigint;
 };

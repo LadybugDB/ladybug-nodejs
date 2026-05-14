@@ -28,7 +28,21 @@ describe("Prepare", function () {
     );
     assert.exists(preparedStatement);
     assert.isTrue(preparedStatement.isSuccess());
+    assert.isTrue(preparedStatement.isReadOnly());
     assert.equal(preparedStatement.getErrorMessage(), "");
+  });
+
+  it("should report whether a prepared statement is read-only", async function () {
+    const readOnlyStatement = await conn.prepare("RETURN 1");
+    assert.isTrue(readOnlyStatement.isSuccess());
+    assert.isTrue(readOnlyStatement.isReadOnly());
+
+    const writeStatement = await conn.prepare(
+      "CREATE NODE TABLE PreparedReadOnlyCheck(id INT64, PRIMARY KEY(id))"
+    );
+    assert.isTrue(writeStatement.isSuccess());
+    assert.isFalse(writeStatement.isReadOnly());
+    await conn.execute(writeStatement);
   });
 
   it("should return error message if the statement is invalid", async function () {

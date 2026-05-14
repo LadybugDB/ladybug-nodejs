@@ -8,6 +8,7 @@ Napi::Object NodePreparedStatement::Init(Napi::Env env, Napi::Object exports) {
             InstanceMethod("initAsync", &NodePreparedStatement::InitAsync),
             InstanceMethod("initSync", &NodePreparedStatement::InitSync),
             InstanceMethod("isSuccess", &NodePreparedStatement::IsSuccess),
+            InstanceMethod("isReadOnly", &NodePreparedStatement::IsReadOnly),
             InstanceMethod("getErrorMessage", &NodePreparedStatement::GetErrorMessage),
         });
 
@@ -51,6 +52,15 @@ Napi::Value NodePreparedStatement::IsSuccess(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     Napi::HandleScope scope(env);
     return Napi::Boolean::New(env, preparedStatement->isSuccess());
+}
+
+Napi::Value NodePreparedStatement::IsReadOnly(const Napi::CallbackInfo& info) {
+    if (preparedStatement == nullptr) {
+        return Napi::Boolean::New(info.Env(), false);
+    }
+    Napi::Env env = info.Env();
+    Napi::HandleScope scope(env);
+    return Napi::Boolean::New(env, preparedStatement->isReadOnly());
 }
 
 Napi::Value NodePreparedStatement::GetErrorMessage(const Napi::CallbackInfo& info) {

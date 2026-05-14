@@ -34,6 +34,7 @@ private:
     int64_t checkpointThreshold;
     bool throwOnWalReplayFailure;
     bool enableChecksums;
+    bool enableDefaultHashIndex;
     std::shared_ptr<Database> database;
 };
 

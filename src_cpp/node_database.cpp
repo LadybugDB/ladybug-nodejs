@@ -28,6 +28,7 @@ NodeDatabase::NodeDatabase(const Napi::CallbackInfo& info) : Napi::ObjectWrap<No
     checkpointThreshold = info[6].As<Napi::Number>().Int64Value();
     throwOnWalReplayFailure = info[7].As<Napi::Boolean>().Value();
     enableChecksums = info[8].As<Napi::Boolean>().Value();
+    enableDefaultHashIndex = info[9].As<Napi::Boolean>().Value();
 }
 
 Napi::Value NodeDatabase::InitSync(const Napi::CallbackInfo& info) {
@@ -67,6 +68,7 @@ void NodeDatabase::InitCppDatabase() {
     systemConfig.autoCheckpoint = autoCheckpoint;
     systemConfig.throwOnWalReplayFailure = throwOnWalReplayFailure;
     systemConfig.enableChecksums = enableChecksums;
+    systemConfig.enableDefaultHashIndex = enableDefaultHashIndex;
     if (checkpointThreshold >= 0) {
         systemConfig.checkpointThreshold = checkpointThreshold;
     }

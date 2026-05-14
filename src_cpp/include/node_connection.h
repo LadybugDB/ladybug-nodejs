@@ -34,6 +34,9 @@ private:
     Napi::Value QueryAsync(const Napi::CallbackInfo& info);
     Napi::Value ExecuteSync(const Napi::CallbackInfo& info);
     Napi::Value QuerySync(const Napi::CallbackInfo& info);
+    Napi::Value CreateArrowTableSync(const Napi::CallbackInfo& info);
+    Napi::Value CreateArrowRelTableSync(const Napi::CallbackInfo& info);
+    Napi::Value DropArrowTableSync(const Napi::CallbackInfo& info);
     void Close(const Napi::CallbackInfo& info);
 
 private:
