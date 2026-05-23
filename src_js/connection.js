@@ -2,6 +2,7 @@
 
 const LbugNative = require("./lbug_native.js");
 const QueryResult = require("./query_result.js");
+const { ArrowQueryResult } = require("./query_result.js");
 const PreparedStatement = require("./prepared_statement.js");
 
 class Connection {
@@ -318,6 +319,59 @@ class Connection {
     const nodeQueryResult = new LbugNative.NodeQueryResult();
     connection.querySync(statement, nodeQueryResult);
     return this._unwrapMultipleQueryResultsSync(nodeQueryResult);
+  }
+
+  /**
+   * Execute a query with the native Arrow result collector.
+   * @param {String} statement the statement to execute.
+   * @param {Number} chunkSize native Arrow chunk size.
+   * @returns {Promise<lbug.ArrowQueryResult>} a promise that resolves to the Arrow query result.
+   */
+  queryArrow(statement, chunkSize = 1000) {
+    return new Promise((resolve, reject) => {
+      if (typeof statement !== "string") {
+        return reject(new Error("statement must be a string."));
+      }
+      if (typeof chunkSize !== "number" || chunkSize <= 0) {
+        return reject(new Error("chunkSize must be a positive number."));
+      }
+      this._getConnection()
+        .then((connection) => {
+          const nodeQueryResult = new LbugNative.NodeQueryResult();
+          try {
+            connection.queryArrowAsync(statement, chunkSize, nodeQueryResult, (err) => {
+              if (err) {
+                return reject(err);
+              }
+              return resolve(new ArrowQueryResult(this, nodeQueryResult, chunkSize));
+            });
+          } catch (e) {
+            return reject(e);
+          }
+        })
+        .catch((err) => {
+          return reject(err);
+        });
+    });
+  }
+
+  /**
+   * Execute a query synchronously with the native Arrow result collector.
+   * @param {String} statement the statement to execute.
+   * @param {Number} chunkSize native Arrow chunk size.
+   * @returns {lbug.ArrowQueryResult} the Arrow query result.
+   */
+  queryArrowSync(statement, chunkSize = 1000) {
+    if (typeof statement !== "string") {
+      throw new Error("statement must be a string.");
+    }
+    if (typeof chunkSize !== "number" || chunkSize <= 0) {
+      throw new Error("chunkSize must be a positive number.");
+    }
+    const connection = this._getConnectionSync();
+    const nodeQueryResult = new LbugNative.NodeQueryResult();
+    connection.queryArrowSync(statement, chunkSize, nodeQueryResult);
+    return new ArrowQueryResult(this, nodeQueryResult, chunkSize);
   }
 
   /**

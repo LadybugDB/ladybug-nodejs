@@ -82,8 +82,10 @@ Napi::Object NodeConnection::Init(Napi::Env env, Napi::Object exports) {
             InstanceMethod("initSync", &NodeConnection::InitSync),
             InstanceMethod("executeAsync", &NodeConnection::ExecuteAsync),
             InstanceMethod("queryAsync", &NodeConnection::QueryAsync),
+            InstanceMethod("queryArrowAsync", &NodeConnection::QueryArrowAsync),
             InstanceMethod("executeSync", &NodeConnection::ExecuteSync),
             InstanceMethod("querySync", &NodeConnection::QuerySync),
+            InstanceMethod("queryArrowSync", &NodeConnection::QueryArrowSync),
             InstanceMethod("createArrowTableSync", &NodeConnection::CreateArrowTableSync),
             InstanceMethod("createArrowRelTableSync", &NodeConnection::CreateArrowRelTableSync),
             InstanceMethod("dropArrowTableSync", &NodeConnection::DropArrowTableSync),
@@ -224,6 +226,37 @@ Napi::Value NodeConnection::QueryAsync(const Napi::CallbackInfo& info) {
             callback, connection, database, statement, nodeQueryResult, info[3]);
     asyncWorker->Queue();
     return info.Env().Undefined();
+}
+
+Napi::Value NodeConnection::QueryArrowAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::HandleScope scope(env);
+    auto statement = info[0].As<Napi::String>().Utf8Value();
+    auto chunkSize = info[1].As<Napi::Number>().Int64Value();
+    auto nodeQueryResult = Napi::ObjectWrap<NodeQueryResult>::Unwrap(info[2].As<Napi::Object>());
+    auto callback = info[3].As<Napi::Function>();
+    auto asyncWorker = new ConnectionQueryArrowAsyncWorker(
+        callback, connection, database, statement, chunkSize, nodeQueryResult);
+    asyncWorker->Queue();
+    return info.Env().Undefined();
+}
+
+Napi::Value NodeConnection::QueryArrowSync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::HandleScope scope(env);
+    auto statement = info[0].As<Napi::String>().Utf8Value();
+    auto chunkSize = info[1].As<Napi::Number>().Int64Value();
+    auto nodeQueryResult = Napi::ObjectWrap<NodeQueryResult>::Unwrap(info[2].As<Napi::Object>());
+    try {
+        auto result = connection->queryAsArrow(statement, chunkSize);
+        if (!result->isSuccess()) {
+            Napi::Error::New(env, result->getErrorMessage()).ThrowAsJavaScriptException();
+        }
+        nodeQueryResult->AdoptQueryResult(std::move(result), connection, database);
+    } catch (const std::exception& exc) {
+        Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
+    }
+    return env.Undefined();
 }
 
 Napi::Value NodeConnection::CreateArrowTableSync(const Napi::CallbackInfo& info) {

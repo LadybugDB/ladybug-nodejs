@@ -4,6 +4,7 @@ const Connection = require("./connection.js");
 const Database = require("./database.js");
 const PreparedStatement = require("./prepared_statement.js");
 const QueryResult = require("./query_result.js");
+const { ArrowQueryResult } = require("./query_result.js");
 
 function json(value) {
   const stringValue = typeof value === "string" ? value : JSON.stringify(value);
@@ -20,6 +21,7 @@ module.exports = {
   Database,
   PreparedStatement,
   QueryResult,
+  ArrowQueryResult,
   json,
   get VERSION() {
     return Database.getVersion();

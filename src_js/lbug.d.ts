@@ -1,4 +1,3 @@
-
 /**
  * A nullable type that can be either T or null.
  */
@@ -28,6 +27,15 @@ export type ProgressCallback = (
  * raw addresses can pass them as bigint.
  */
 export type NativePointer = bigint | object;
+
+/**
+ * Zero-copy CSR arrays returned by an Arrow query result.
+ */
+export interface CSRResult {
+    indptr: BigUint64Array;
+    indices: BigUint64Array;
+    edgeIds: BigUint64Array | null;
+}
 
 /**
  * Represents a node ID in the graph database.
@@ -289,6 +297,22 @@ export class Connection {
     querySync(statement: string): QueryResult | QueryResult[];
 
     /**
+     * Execute a query with the native Arrow result collector.
+     * @param statement The statement to execute
+     * @param chunkSize Native Arrow chunk size
+     * @returns Promise that resolves to the Arrow query result
+     */
+    queryArrow(statement: string, chunkSize?: number): Promise<ArrowQueryResult>;
+
+    /**
+     * Execute a query synchronously with the native Arrow result collector.
+     * @param statement The statement to execute
+     * @param chunkSize Native Arrow chunk size
+     * @returns The Arrow query result
+     */
+    queryArrowSync(statement: string, chunkSize?: number): ArrowQueryResult;
+
+    /**
      * Create an Arrow memory-backed node table from Arrow C Data Interface pointers.
      * Ownership of schemaPtr and arraysPtr is transferred to Ladybug.
      */
@@ -442,6 +466,16 @@ export class QueryResult {
 }
 
 /**
+ * Represents an Arrow-native query result.
+ */
+export class ArrowQueryResult extends QueryResult {
+    /**
+     * Get zero-copy native CSR arrays.
+     */
+    csr(): CSRResult;
+}
+
+/**
  * Default export for the Lbug module.
  */
 declare const lbug: {
@@ -449,6 +483,7 @@ declare const lbug: {
     Connection: typeof Connection;
     PreparedStatement: typeof PreparedStatement;
     QueryResult: typeof QueryResult;
+    ArrowQueryResult: typeof ArrowQueryResult;
     json: typeof json;
     VERSION: string;
     STORAGE_VERSION: bigint;

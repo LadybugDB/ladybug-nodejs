@@ -5,6 +5,7 @@
 
 #include "include/node_util.h"
 #include "main/lbug.h"
+#include "main/query_result/arrow_query_result.h"
 
 using namespace lbug::main;
 
@@ -28,6 +29,7 @@ Napi::Object NodeQueryResult::Init(Napi::Env env, Napi::Object exports) {
             InstanceMethod("getColumnNamesSync", &NodeQueryResult::GetColumnNamesSync),
             InstanceMethod("getQuerySummaryAsync", &NodeQueryResult::GetQuerySummaryAsync),
             InstanceMethod("getQuerySummarySync", &NodeQueryResult::GetQuerySummarySync),
+            InstanceMethod("getCSRSync", &NodeQueryResult::GetCSRSync),
             InstanceMethod("close", &NodeQueryResult::Close)});
 
     constructor = Napi::Persistent(t);
@@ -241,6 +243,51 @@ Napi::Value NodeQueryResult::GetColumnNamesSync(const Napi::CallbackInfo& info) 
             nodeColumnNames.Set(i, Napi::String::New(env, columnNames->at(i)));
         }
         return nodeColumnNames;
+    } catch (const std::exception& exc) {
+        Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
+    }
+    return env.Undefined();
+}
+
+namespace {
+
+struct CSRArrayBufferHolder {
+    explicit CSRArrayBufferHolder(ArrowQueryResult::CSRArrowArray array)
+        : array{std::move(array)} {}
+    ArrowQueryResult::CSRArrowArray array;
+};
+
+Napi::BigUint64Array WrapCSRArray(Napi::Env env, ArrowQueryResult::CSRArrowArray array) {
+    auto length = static_cast<size_t>(array.array.length);
+    auto* data = const_cast<void*>(array.array.buffers[1]);
+    auto* holder = new CSRArrayBufferHolder(std::move(array));
+    auto buffer = Napi::ArrayBuffer::New(env, data, length * sizeof(uint64_t),
+        [](Napi::Env, void*, CSRArrayBufferHolder* holder) { delete holder; }, holder);
+    return Napi::BigUint64Array::New(env, length, buffer, 0, napi_biguint64_array);
+}
+
+} // namespace
+
+Napi::Value NodeQueryResult::GetCSRSync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::HandleScope scope(env);
+    try {
+        auto& queryResult = GetQueryResult();
+        auto* arrowQueryResult = dynamic_cast<ArrowQueryResult*>(&queryResult);
+        if (arrowQueryResult == nullptr || !arrowQueryResult->hasCSRMetadata()) {
+            throw std::runtime_error("CSR export is only supported for Arrow query results "
+                                     "with native CSR metadata.");
+        }
+        auto csr = arrowQueryResult->getCSRArrowArrays();
+        Napi::Object result = Napi::Object::New(env);
+        result.Set("indptr", WrapCSRArray(env, std::move(csr.indptr)));
+        result.Set("indices", WrapCSRArray(env, std::move(csr.indices)));
+        if (csr.edgeIDs.has_value()) {
+            result.Set("edgeIds", WrapCSRArray(env, std::move(*csr.edgeIDs)));
+        } else {
+            result.Set("edgeIds", env.Null());
+        }
+        return result;
     } catch (const std::exception& exc) {
         Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
     }

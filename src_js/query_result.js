@@ -239,4 +239,27 @@ class QueryResult {
   }
 }
 
+class ArrowQueryResult extends QueryResult {
+  /**
+   * Internal constructor. Use `Connection.queryArrow` or `Connection.queryArrowSync`.
+   * @param {Connection} connection the connection object.
+   * @param {LbugNative.NodeQueryResult} queryResult the native query result object.
+   * @param {Number} chunkSize native Arrow result chunk size.
+   */
+  constructor(connection, queryResult, chunkSize) {
+    super(connection, queryResult);
+    this._chunkSize = chunkSize;
+  }
+
+  /**
+   * Get zero-copy native CSR arrays from an Arrow query result.
+   * @returns {{indptr: BigUint64Array, indices: BigUint64Array, edgeIds: BigUint64Array|null}}
+   */
+  csr() {
+    this._checkClosed();
+    return this._queryResult.getCSRSync();
+  }
+}
+
 module.exports = QueryResult;
+module.exports.ArrowQueryResult = ArrowQueryResult;

@@ -32,8 +32,10 @@ private:
     void SetQueryTimeout(const Napi::CallbackInfo& info);
     Napi::Value ExecuteAsync(const Napi::CallbackInfo& info);
     Napi::Value QueryAsync(const Napi::CallbackInfo& info);
+    Napi::Value QueryArrowAsync(const Napi::CallbackInfo& info);
     Napi::Value ExecuteSync(const Napi::CallbackInfo& info);
     Napi::Value QuerySync(const Napi::CallbackInfo& info);
+    Napi::Value QueryArrowSync(const Napi::CallbackInfo& info);
     Napi::Value CreateArrowTableSync(const Napi::CallbackInfo& info);
     Napi::Value CreateArrowRelTableSync(const Napi::CallbackInfo& info);
     Napi::Value DropArrowTableSync(const Napi::CallbackInfo& info);
@@ -186,6 +188,41 @@ private:
     std::string statement;
     NodeQueryResult* nodeQueryResult;
     std::optional<Napi::ThreadSafeFunction> progressCallback;
+};
+
+class ConnectionQueryArrowAsyncWorker : public Napi::AsyncWorker {
+public:
+    ConnectionQueryArrowAsyncWorker(Napi::Function& callback,
+        std::shared_ptr<Connection>& connection, std::shared_ptr<Database>& database,
+        std::string statement, int64_t chunkSize, NodeQueryResult* nodeQueryResult)
+        : Napi::AsyncWorker(callback), connection(connection), database(database),
+          statement(std::move(statement)), chunkSize(chunkSize), nodeQueryResult(nodeQueryResult) {}
+
+    ~ConnectionQueryArrowAsyncWorker() override = default;
+
+    void Execute() override {
+        try {
+            auto result = connection->queryAsArrow(statement, chunkSize);
+            if (!result->isSuccess()) {
+                SetError(result->getErrorMessage());
+                return;
+            }
+            nodeQueryResult->AdoptQueryResult(std::move(result), connection, database);
+        } catch (const std::exception& exc) {
+            SetError(std::string(exc.what()));
+        }
+    }
+
+    void OnOK() override { Callback().Call({Env().Null()}); }
+
+    void OnError(Napi::Error const& error) override { Callback().Call({error.Value()}); }
+
+private:
+    std::shared_ptr<Connection> connection;
+    std::shared_ptr<Database> database;
+    std::string statement;
+    int64_t chunkSize;
+    NodeQueryResult* nodeQueryResult;
 };
 
 } // namespace main
