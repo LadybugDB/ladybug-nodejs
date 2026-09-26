@@ -41,18 +41,23 @@ class Connection {
     if (this._isClosed) {
       throw new Error("Connection is closed.");
     }
-    if (!this._isInitialized) {
-      if (!this._initPromise) {
+    if (this._isInitialized) {
+      return;
+    }
+    if (!this._initPromise) {
+      // Cache the promise synchronously (no await before assignment) so
+      // concurrent init() calls share a single initialization instead of
+      // each starting their own (which crashed the process, see #24).
+      this._initPromise = (async () => {
+        const database = await this._database._getDatabase();
         if (!this._connection) {
-          const database = await this._database._getDatabase();
           this._connection = new LbugNative.NodeConnection(database);
         }
-        this._initPromise = new Promise((resolve, reject) => {
+        await new Promise((resolve, reject) => {
           this._connection.initAsync((err) => {
             if (err) {
               reject(err);
             } else {
-              this._isInitialized = true;
               if (this._numThreads) {
                 this._connection.setMaxNumThreadForExec(this._numThreads);
               }
@@ -63,8 +68,21 @@ class Connection {
             }
           });
         });
+        this._isInitialized = true;
+      })();
+    }
+    const initPromise = this._initPromise;
+    try {
+      await initPromise;
+    } catch (err) {
+      // Allow retry after a failed initialization (clear only if no
+      // newer init has started in the meantime).
+      if (this._initPromise === initPromise) {
+        this._initPromise = null;
       }
-      await this._initPromise;
+      throw err;
+    }
+    if (this._initPromise === initPromise) {
       this._initPromise = null;
     }
   }
