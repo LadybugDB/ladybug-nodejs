@@ -129,6 +129,10 @@ jobs:
         shell: cmd
         env:
           EXTRA_CMAKE_FLAGS: -DLBUG_NODEJS_ENABLE_TEST_EXPORTS=ON
+          # windows-2025 images ship mingw64 in PATH, which CMake would
+          # otherwise prefer over MSVC (breaking ws2_32 linking and ar).
+          CC: cl
+          CXX: cl
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
