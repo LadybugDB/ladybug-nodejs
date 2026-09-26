@@ -111,14 +111,18 @@ jobs:
         shell: pwsh
         run: |
           choco install openssl.light -y --no-progress
-          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
-          # Shining Light layouts differ by version; locate the import libs
-          # explicitly so CMake's FindOpenSSL finds them.
-          $crypto = Get-ChildItem -Path 'C:\Program Files\OpenSSL' -Recurse -Filter 'libcrypto*.lib' | Select-Object -First 1
-          $ssl = Get-ChildItem -Path 'C:\Program Files\OpenSSL' -Recurse -Filter 'libssl*.lib' | Select-Object -First 1
-          if ($crypto) { "OPENSSL_CRYPTO_LIBRARY=$($crypto.FullName)" >> $env:GITHUB_ENV }
-          if ($ssl) { "OPENSSL_SSL_LIBRARY=$($ssl.FullName)" >> $env:GITHUB_ENV }
-          Get-ChildItem -Path 'C:\Program Files\OpenSSL' -Recurse -Filter '*.lib' | ForEach-Object { $_.FullName }
+          # Shining Light keeps the x64/MD import libs under lib/VC/x64/MD,
+          # which CMake's FindOpenSSL does not search (and it ignores the
+          # OPENSSL_*_LIBRARY env vars), so stage a standard layout in a
+          # space-free dir and point OPENSSL_ROOT_DIR at it.
+          New-Item -ItemType Directory -Force -Path D:\openssl\lib | Out-Null
+          Copy-Item -Recurse 'C:\Program Files\OpenSSL\include' D:\openssl\
+          Copy-Item 'C:\Program Files\OpenSSL\lib\VC\x64\MD\libcrypto.lib' D:\openssl\lib\
+          Copy-Item 'C:\Program Files\OpenSSL\lib\VC\x64\MD\libssl.lib' D:\openssl\lib\
+          "OPENSSL_ROOT_DIR=D:\openssl" >> $env:GITHUB_ENV
+          # Runtime DLLs (libcrypto/libssl-3-x64.dll) for the test step.
+          'C:\Program Files\OpenSSL\bin' >> $env:GITHUB_PATH
+          Get-ChildItem D:\openssl -Recurse | ForEach-Object { $_.FullName }
 
       - name: Build Node.js native module (Windows)
         if: ${{ matrix.platform == 'win32' }}
