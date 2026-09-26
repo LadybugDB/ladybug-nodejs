@@ -111,7 +111,7 @@ jobs:
         shell: cmd
         run: |
           choco install openssl.light -y --no-progress
-          echo OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64>> %GITHUB_ENV%
+          echo OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL>> %GITHUB_ENV%
 
       - name: Build Node.js native module (Windows)
         if: ${{ matrix.platform == 'win32' }}
