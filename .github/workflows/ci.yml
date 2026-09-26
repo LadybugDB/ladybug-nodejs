@@ -108,10 +108,17 @@ jobs:
 
       - name: Install OpenSSL (Windows)
         if: ${{ matrix.platform == 'win32' }}
-        shell: cmd
+        shell: pwsh
         run: |
           choco install openssl.light -y --no-progress
-          echo OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL>> %GITHUB_ENV%
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+          # Shining Light layouts differ by version; locate the import libs
+          # explicitly so CMake's FindOpenSSL finds them.
+          $crypto = Get-ChildItem -Path 'C:\Program Files\OpenSSL' -Recurse -Filter 'libcrypto*.lib' | Select-Object -First 1
+          $ssl = Get-ChildItem -Path 'C:\Program Files\OpenSSL' -Recurse -Filter 'libssl*.lib' | Select-Object -First 1
+          if ($crypto) { "OPENSSL_CRYPTO_LIBRARY=$($crypto.FullName)" >> $env:GITHUB_ENV }
+          if ($ssl) { "OPENSSL_SSL_LIBRARY=$($ssl.FullName)" >> $env:GITHUB_ENV }
+          Get-ChildItem -Path 'C:\Program Files\OpenSSL' -Recurse -Filter '*.lib' | ForEach-Object { $_.FullName }
 
       - name: Build Node.js native module (Windows)
         if: ${{ matrix.platform == 'win32' }}
