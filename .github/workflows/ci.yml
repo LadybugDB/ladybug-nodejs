@@ -124,6 +124,12 @@ jobs:
           'C:\Program Files\OpenSSL\bin' >> $env:GITHUB_PATH
           Get-ChildItem D:\openssl -Recurse | ForEach-Object { $_.FullName }
 
+      - name: Set up MSVC environment (Windows)
+        if: ${{ matrix.platform == 'win32' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Build Node.js native module (Windows)
         if: ${{ matrix.platform == 'win32' }}
         shell: cmd
@@ -131,14 +137,13 @@ jobs:
           EXTRA_CMAKE_FLAGS: -DLBUG_NODEJS_ENABLE_TEST_EXPORTS=ON
           # windows-2025 images ship mingw64 in PATH, which CMake would
           # otherwise prefer over MSVC (breaking ws2_32 linking and ar).
+          # (cl itself comes from msvc-dev-cmd above via vswhere.)
           CC: cl
           CXX: cl
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           ccache -s
-          make GEN=Ninja nodejs
-          ccache -s
+          make GEN=Ninja nodejs && ccache -s
 
       - name: Build Node.js native module (non-Windows)
         if: ${{ matrix.platform != 'win32' }}
