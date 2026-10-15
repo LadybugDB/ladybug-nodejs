@@ -92,6 +92,20 @@ describe("Query execution", function () {
 
 
 describe("Query result", function () {
+  it("should fail loudly when getAll() is used without await in sync code", async function () {
+    const queryResult = conn.querySync(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    const pending = queryResult.getAll();
+    assert.instanceOf(pending, Promise);
+    assert.throws(() => JSON.stringify(pending), /getAllSync/);
+    const rows = await pending;
+    assert.equal(rows.length, PERSON_IDS.length);
+    for (let i = 0; i < PERSON_IDS.length; ++i) {
+      assert.equal(rows[i]["a.ID"], PERSON_IDS[i]);
+    }
+  });
+
   it("should get all rows of a query result synchronously", function () {
     const queryResult = conn.querySync(
       "MATCH (a:person) RETURN a.ID ORDER BY a.ID"

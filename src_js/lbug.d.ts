@@ -394,7 +394,9 @@ export class QueryResult {
     getNumTuples(): number;
 
     /**
-     * Get the next row.
+     * Get the next row. This method is asynchronous and must be awaited
+     * (`await result.getNext()`); in synchronous code, use `getNextSync()`
+     * instead.
      * @returns Promise that resolves to the next row or null if no more rows
      */
     getNext(): Promise<Record<string, LbugValue> | null>;
@@ -419,6 +421,12 @@ export class QueryResult {
 
     /**
      * Get all rows of the query result.
+     *
+     * WARNING: this method is asynchronous and must be awaited
+     * (`await result.getAll()`). Using it without `await` yields a pending
+     * Promise (which `JSON.stringify` renders as `{}`), not the rows;
+     * serializing that Promise throws an error pointing here. In synchronous
+     * code, use `getAllSync()` instead.
      * @returns Promise that resolves to all rows
      */
     getAll(): Promise<Record<string, LbugValue>[]>;
@@ -440,7 +448,8 @@ export class QueryResult {
     ): void;
 
     /**
-     * Get the column data types.
+     * Get the column data types. This method is asynchronous and must be
+     * awaited; in synchronous code, use `getColumnDataTypesSync()` instead.
      * @returns Promise that resolves to array of data type strings
      */
     getColumnDataTypes(): Promise<string[]>;
@@ -452,7 +461,8 @@ export class QueryResult {
     getColumnDataTypesSync(): string[];
 
     /**
-     * Get the column names.
+     * Get the column names. This method is asynchronous and must be awaited;
+     * in synchronous code, use `getColumnNamesSync()` instead.
      * @returns Promise that resolves to array of column names
      */
     getColumnNames(): Promise<string[]>;

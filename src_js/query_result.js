@@ -2,6 +2,24 @@
 
 const assert = require("assert");
 
+const GET_ALL_AWAIT_MESSAGE =
+  "QueryResult.getAll() returns a Promise and must be awaited " +
+  "(`await result.getAll()`). In synchronous code, use `result.getAllSync()` instead. " +
+  "Serializing the un-awaited Promise (e.g. via JSON.stringify, which renders it as '{}') " +
+  "is almost certainly a bug.";
+
+/**
+ * Promise returned by QueryResult.getAll(). Behaves exactly like a native
+ * Promise, except that serializing it (e.g. via JSON.stringify, which renders
+ * a plain pending Promise as '{}') throws a descriptive error instead of
+ * silently producing '{}' that looks like an empty result.
+ */
+class GetAllPromise extends Promise {
+  toJSON() {
+    throw new Error(GET_ALL_AWAIT_MESSAGE);
+  }
+}
+
 class QueryResult {
   /**
    * Internal constructor. Use `Connection.query` or `Connection.execute`
@@ -51,7 +69,9 @@ class QueryResult {
   }
 
   /**
-   * Get the next row of the query result.
+   * Get the next row of the query result. This method is asynchronous and must
+   * be awaited (`await result.getNext()`); in synchronous code, use
+   * `getNextSync()` instead.
    * @returns {Promise<Object>} a promise that resolves to the next row of the query result. The promise is rejected if there is an error.
    */
   getNext() {
@@ -98,16 +118,26 @@ class QueryResult {
 
   /**
    * Get all rows of the query result.
+   *
+   * WARNING: this method is asynchronous and returns a Promise — it must be
+   * awaited (`await result.getAll()`). Using it without `await` yields a
+   * pending Promise (which `JSON.stringify` renders as `{}`), not the rows;
+   * serializing that Promise throws an error pointing here. In synchronous
+   * code, use `getAllSync()` instead.
    * @returns {Promise<Array<Object>>} a promise that resolves to all rows of the query result. The promise is rejected if there is an error.
    */
-  async getAll() {
-    this._checkClosed();
-    this._queryResult.resetIterator();
-    const result = [];
-    while (this.hasNext()) {
-      result.push(await this.getNext());
-    }
-    return result;
+  getAll() {
+    return new GetAllPromise((resolve, reject) => {
+      (async () => {
+        this._checkClosed();
+        this._queryResult.resetIterator();
+        const result = [];
+        while (this.hasNext()) {
+          result.push(await this.getNext());
+        }
+        return result;
+      })().then(resolve, reject);
+    });
   }
 
   /**
@@ -141,7 +171,9 @@ class QueryResult {
   }
 
   /**
-   * Get the data types of the columns of the query result.
+   * Get the data types of the columns of the query result. This method is
+   * asynchronous and must be awaited; in synchronous code, use
+   * `getColumnDataTypesSync()` instead.
    * @returns {Promise<Array<String>>} a promise that resolves to the data types of the columns of the query result. The promise is rejected if there is an error.
    */
   getColumnDataTypes() {
@@ -166,7 +198,9 @@ class QueryResult {
   }
 
   /**
-   * Get the names of the columns of the query result.
+   * Get the names of the columns of the query result. This method is
+   * asynchronous and must be awaited; in synchronous code, use
+   * `getColumnNamesSync()` instead.
    * @returns {Promise<Array<String>>} a promise that resolves to the names of the columns of the query result. The promise is rejected if there is an error.
    */
   getColumnNames() {
@@ -192,6 +226,8 @@ class QueryResult {
 
   /**
    * Get the query summary (compiling and execution time) of the query result.
+   * This method is asynchronous and must be awaited; in synchronous code, use
+   * `getQuerySummarySync()` instead.
    * @returns {Promise<Object>} a promise that resolves to the query summary of the query result. The promise is rejected if there is an error.
    */
   getQuerySummary() {
