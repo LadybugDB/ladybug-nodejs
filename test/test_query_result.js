@@ -133,6 +133,18 @@ describe("Get all", function () {
     const ids = tuples.map((tuple) => tuple["a.ID"]);
     assert.deepEqual(ids, PERSON_IDS);
   });
+
+  it("should fail loudly instead of silently returning {} when not awaited", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    const pending = queryResult.getAll();
+    assert.instanceOf(pending, Promise);
+    assert.throws(() => JSON.stringify(pending), /getAllSync/);
+    const tuples = await pending;
+    const ids = tuples.map((tuple) => tuple["a.ID"]);
+    assert.deepEqual(ids, PERSON_IDS);
+  });
 });
 
 describe("All", function () {
