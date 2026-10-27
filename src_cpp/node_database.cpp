@@ -16,19 +16,60 @@ Napi::Object NodeDatabase::Init(Napi::Env env, Napi::Object exports) {
     return exports;
 }
 
+namespace {
+
+// Null/undefined means "use the engine default"; the setting is left unset.
+bool getOptionalInt64(const Napi::CallbackInfo& info, size_t index, int64_t& out) {
+    if (index >= info.Length() || info[index].IsNull() || info[index].IsUndefined()) {
+        return false;
+    }
+    out = info[index].As<Napi::Number>().Int64Value();
+    return true;
+}
+
+bool getOptionalBool(const Napi::CallbackInfo& info, size_t index, bool& out) {
+    if (index >= info.Length() || info[index].IsNull() || info[index].IsUndefined()) {
+        return false;
+    }
+    out = info[index].As<Napi::Boolean>().Value();
+    return true;
+}
+
+} // namespace
+
 NodeDatabase::NodeDatabase(const Napi::CallbackInfo& info) : Napi::ObjectWrap<NodeDatabase>(info) {
     Napi::Env env = info.Env();
     Napi::HandleScope scope(env);
     databasePath = info[0].ToString();
-    bufferPoolSize = info[1].As<Napi::Number>().Int64Value();
-    enableCompression = info[2].As<Napi::Boolean>().Value();
-    readOnly = info[3].As<Napi::Boolean>().Value();
-    maxDBSize = info[4].As<Napi::Number>().Int64Value();
-    autoCheckpoint = info[5].As<Napi::Boolean>().Value();
-    checkpointThreshold = info[6].As<Napi::Number>().Int64Value();
-    throwOnWalReplayFailure = info[7].As<Napi::Boolean>().Value();
-    enableChecksums = info[8].As<Napi::Boolean>().Value();
-    enableDefaultHashIndex = info[9].As<Napi::Boolean>().Value();
+    int64_t intValue = 0;
+    bool boolValue = false;
+    if (getOptionalInt64(info, 1, intValue)) {
+        bufferPoolSize = intValue;
+    }
+    if (getOptionalBool(info, 2, boolValue)) {
+        enableCompression = boolValue;
+    }
+    if (getOptionalBool(info, 3, boolValue)) {
+        readOnly = boolValue;
+    }
+    if (getOptionalInt64(info, 4, intValue)) {
+        maxDBSize = intValue;
+    }
+    if (getOptionalBool(info, 5, boolValue)) {
+        autoCheckpoint = boolValue;
+    }
+    if (getOptionalInt64(info, 6, intValue)) {
+        checkpointThreshold = intValue;
+    }
+    if (getOptionalBool(info, 7, boolValue)) {
+        throwOnWalReplayFailure = boolValue;
+    }
+    if (getOptionalBool(info, 8, boolValue)) {
+        enableChecksums = boolValue;
+    }
+    if (getOptionalBool(info, 9, boolValue)) {
+        enableDefaultHashIndex = boolValue;
+    }
 }
 
 Napi::Value NodeDatabase::InitSync(const Napi::CallbackInfo& info) {
@@ -54,23 +95,35 @@ Napi::Value NodeDatabase::InitAsync(const Napi::CallbackInfo& info) {
 }
 
 void NodeDatabase::InitCppDatabase() {
+    // Start from the engine defaults and only apply explicitly set settings,
+    // so engine-side default changes propagate automatically.
     auto systemConfig = SystemConfig();
-    if (bufferPoolSize > 0) {
-        systemConfig.bufferPoolSize = bufferPoolSize;
+    if (bufferPoolSize && *bufferPoolSize > 0) {
+        systemConfig.bufferPoolSize = static_cast<uint64_t>(*bufferPoolSize);
     }
-    if (!enableCompression) {
-        systemConfig.enableCompression = enableCompression;
+    if (enableCompression) {
+        systemConfig.enableCompression = *enableCompression;
     }
-    systemConfig.readOnly = readOnly;
-    if (maxDBSize > 0) {
-        systemConfig.maxDBSize = maxDBSize;
+    if (readOnly) {
+        systemConfig.readOnly = *readOnly;
     }
-    systemConfig.autoCheckpoint = autoCheckpoint;
-    systemConfig.throwOnWalReplayFailure = throwOnWalReplayFailure;
-    systemConfig.enableChecksums = enableChecksums;
-    systemConfig.enableDefaultHashIndex = enableDefaultHashIndex;
-    if (checkpointThreshold >= 0) {
-        systemConfig.checkpointThreshold = checkpointThreshold;
+    if (maxDBSize && *maxDBSize > 0) {
+        systemConfig.maxDBSize = static_cast<uint64_t>(*maxDBSize);
+    }
+    if (autoCheckpoint) {
+        systemConfig.autoCheckpoint = *autoCheckpoint;
+    }
+    if (throwOnWalReplayFailure) {
+        systemConfig.throwOnWalReplayFailure = *throwOnWalReplayFailure;
+    }
+    if (enableChecksums) {
+        systemConfig.enableChecksums = *enableChecksums;
+    }
+    if (enableDefaultHashIndex) {
+        systemConfig.enableDefaultHashIndex = *enableDefaultHashIndex;
+    }
+    if (checkpointThreshold && *checkpointThreshold >= 0) {
+        systemConfig.checkpointThreshold = static_cast<uint64_t>(*checkpointThreshold);
     }
     this->database = std::make_shared<Database>(databasePath, systemConfig);
 }
