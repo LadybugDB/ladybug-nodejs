@@ -11,34 +11,39 @@ class Database {
    *
    * @param {String} databasePath path to the database file. If the path is not specified, or empty, or equal to
    `:memory:`, the database will be created in memory.
-   * @param {Number} bufferManagerSize size of the buffer manager in bytes.
-   * @param {Boolean} enableCompression whether to enable compression.
-   * @param {Boolean} readOnly if true, database will be opened in read-only mode.
-   * @param {Number} maxDBSize maximum size of the database file in bytes. Note that
+   * @param {Number|null} bufferManagerSize size of the buffer manager in bytes. Null (default) uses the engine default.
+   * @param {Boolean|null} enableCompression whether to enable compression. Null (default) uses the engine default.
+   * @param {Boolean|null} readOnly if true, database will be opened in read-only mode. Null (default) uses the engine default.
+   * @param {Number|null} maxDBSize maximum size of the database file in bytes. Note that
    * this is introduced temporarily for now to get around with the default 8TB mmap
-   * address space limit some environment.
-   * @param {Boolean} autoCheckpoint If true, the database will automatically checkpoint when the size of
-   * the WAL file exceeds the checkpoint threshold.
-   * @param {Number} checkpointThreshold The threshold of the WAL file size in bytes. When the size of the
+   * address space limit some environment. Null (default) uses the engine default.
+   * @param {Boolean|null} autoCheckpoint If true, the database will automatically checkpoint when the size of
+   * the WAL file exceeds the checkpoint threshold. Null (default) uses the engine default.
+   * @param {Number|null} checkpointThreshold The threshold of the WAL file size in bytes. When the size of the
    * WAL file exceeds this threshold, the database will checkpoint if autoCheckpoint is true.
-   * @param {Boolean} throwOnWalReplayFailure If true, any WAL replaying failure when loading the database
+   * Null (default) uses the engine default.
+   * @param {Boolean|null} throwOnWalReplayFailure If true, any WAL replaying failure when loading the database
    * will throw an error. Otherwise, Lbug will silently ignore the failure and replay up to where
-   * the error occured.
-   * @param {Boolean} enableChecksums If true, the database will use checksums to detect corruption in the
-   * WAL file.
-   * @param {Boolean} enableDefaultHashIndex If true, node tables create the default primary-key hash index.
+   * the error occured. Null (default) uses the engine default.
+   * @param {Boolean|null} enableChecksums If true, the database will use checksums to detect corruption in the
+   * WAL file. Null (default) uses the engine default.
+   * @param {Boolean|null} enableDefaultHashIndex If true, node tables create the default primary-key hash index.
+   * Null (default) uses the engine default.
+   *
+   * Any setting left as null/undefined is not forwarded, so the engine default applies and
+   * engine-side default changes propagate automatically.
    */
   constructor(
     databasePath,
-    bufferManagerSize = 0,
-    enableCompression = true,
-    readOnly = false,
-    maxDBSize = 0,
-    autoCheckpoint = true,
-    checkpointThreshold = -1,
-    throwOnWalReplayFailure = true,
-    enableChecksums = true,
-    enableDefaultHashIndex = true,
+    bufferManagerSize = null,
+    enableCompression = null,
+    readOnly = null,
+    maxDBSize = null,
+    autoCheckpoint = null,
+    checkpointThreshold = null,
+    throwOnWalReplayFailure = null,
+    enableChecksums = null,
+    enableDefaultHashIndex = null,
   ) {
     if (!databasePath) {
       databasePath = ":memory:";
@@ -46,18 +51,26 @@ class Database {
     else if (typeof databasePath !== "string") {
       throw new Error("Database path must be a string.");
     }
-    if (typeof bufferManagerSize !== "number" || bufferManagerSize < 0) {
+    if (bufferManagerSize != null && (typeof bufferManagerSize !== "number" || bufferManagerSize < 0)) {
       throw new Error("Buffer manager size must be a positive integer.");
     }
-    if (typeof maxDBSize !== "number" || maxDBSize < 0) {
+    if (maxDBSize != null && (typeof maxDBSize !== "number" || maxDBSize < 0)) {
       throw new Error("Max DB size must be a positive integer.");
     }
-    if (typeof checkpointThreshold !== "number" || maxDBSize < -1) {
+    // Note: negative explicit values (e.g. the historical -1 default) are accepted here and
+    // ignored by the native layer, which keeps the engine default for them.
+    if (checkpointThreshold != null && typeof checkpointThreshold !== "number") {
       throw new Error("Checkpoint threshold must be a positive integer.");
     }
-    bufferManagerSize = Math.floor(bufferManagerSize);
-    maxDBSize = Math.floor(maxDBSize);
-    checkpointThreshold = Math.floor(checkpointThreshold);
+    if (bufferManagerSize != null) {
+      bufferManagerSize = Math.floor(bufferManagerSize);
+    }
+    if (maxDBSize != null) {
+      maxDBSize = Math.floor(maxDBSize);
+    }
+    if (checkpointThreshold != null) {
+      checkpointThreshold = Math.floor(checkpointThreshold);
+    }
     this._database = new LbugNative.NodeDatabase(
       databasePath,
       bufferManagerSize,

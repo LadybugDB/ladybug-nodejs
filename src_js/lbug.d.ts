@@ -104,21 +104,24 @@ export type LbugValue =
 
 /**
  * Configuration options for the database system.
+ *
+ * Any option left undefined uses the engine default; explicitly set options
+ * override the engine configuration.
  */
 export interface SystemConfig {
-    /** Size of the buffer pool in bytes */
+    /** Size of the buffer pool in bytes (engine default if omitted) */
     bufferPoolSize?: number;
-    /** Whether to enable compression */
+    /** Whether to enable compression (engine default if omitted) */
     enableCompression?: boolean;
-    /** Whether to open the database in read-only mode */
+    /** Whether to open the database in read-only mode (engine default if omitted) */
     readOnly?: boolean;
-    /** Maximum size of the database in bytes */
+    /** Maximum size of the database in bytes (engine default if omitted) */
     maxDBSize?: number;
-    /** Whether to enable automatic checkpoints */
+    /** Whether to enable automatic checkpoints (engine default if omitted) */
     autoCheckpoint?: boolean;
-    /** Threshold for automatic checkpoints */
+    /** Threshold for automatic checkpoints (engine default if omitted) */
     checkpointThreshold?: number;
-    /** Whether node tables create the default primary-key hash index */
+    /** Whether node tables create the default primary-key hash index (engine default if omitted) */
     enableDefaultHashIndex?: boolean;
 }
 
@@ -132,17 +135,18 @@ export function json(value: string | LbugValue): LbugValue;
  */
 export class Database {
     /**
-     * Constructs a new Database instance.
+     * Constructs a new Database instance. Any setting left undefined/null uses
+     * the engine default; explicitly set settings override it.
      * @param databasePath Path to the database directory (defaults to ":memory:")
-     * @param bufferManagerSize Size of the buffer manager in bytes
-     * @param enableCompression Whether to enable compression
-     * @param readOnly Whether to open in read-only mode
-     * @param maxDBSize Maximum size of the database in bytes
-     * @param autoCheckpoint Whether to enable automatic checkpoints
-     * @param checkpointThreshold Threshold for automatic checkpoints
-     * @param throwOnWalReplayFailure Whether WAL replay failures should throw
-     * @param enableChecksums Whether checksum validation is enabled
-     * @param enableDefaultHashIndex Whether node tables create the default primary-key hash index
+     * @param bufferManagerSize Size of the buffer manager in bytes (engine default if omitted)
+     * @param enableCompression Whether to enable compression (engine default if omitted)
+     * @param readOnly Whether to open in read-only mode (engine default if omitted)
+     * @param maxDBSize Maximum size of the database in bytes (engine default if omitted)
+     * @param autoCheckpoint Whether to enable automatic checkpoints (engine default if omitted)
+     * @param checkpointThreshold Threshold for automatic checkpoints (engine default if omitted)
+     * @param throwOnWalReplayFailure Whether WAL replay failures should throw (engine default if omitted)
+     * @param enableChecksums Whether checksum validation is enabled (engine default if omitted)
+     * @param enableDefaultHashIndex Whether node tables create the default primary-key hash index (engine default if omitted)
      */
     constructor(
         databasePath?: string,
