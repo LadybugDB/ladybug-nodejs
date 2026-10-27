@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include "main/lbug.h"
 #include <napi.h>
@@ -26,15 +27,15 @@ private:
 
 private:
     std::string databasePath;
-    size_t bufferPoolSize;
-    bool enableCompression;
-    bool readOnly;
-    uint64_t maxDBSize;
-    bool autoCheckpoint;
-    int64_t checkpointThreshold;
-    bool throwOnWalReplayFailure;
-    bool enableChecksums;
-    bool enableDefaultHashIndex;
+    std::optional<int64_t> bufferPoolSize;
+    std::optional<bool> enableCompression;
+    std::optional<bool> readOnly;
+    std::optional<int64_t> maxDBSize;
+    std::optional<bool> autoCheckpoint;
+    std::optional<int64_t> checkpointThreshold;
+    std::optional<bool> throwOnWalReplayFailure;
+    std::optional<bool> enableChecksums;
+    std::optional<bool> enableDefaultHashIndex;
     std::shared_ptr<Database> database;
 };
 
