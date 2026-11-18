@@ -13,7 +13,7 @@
 using namespace lbug::main;
 using namespace lbug::common;
 
-class NodeConnection : public Napi::ObjectWrap<NodeConnection> {
+class NodeConnection : public Napi::ObjectWrap<NodeConnection>, public DatabaseDependent {
     friend class ConnectionInitAsyncWorker;
     friend class ConnectionExecuteAsyncWorker;
     friend class ConnectionQueryAsyncWorker;
@@ -22,7 +22,7 @@ class NodeConnection : public Napi::ObjectWrap<NodeConnection> {
 public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     explicit NodeConnection(const Napi::CallbackInfo& info);
-    ~NodeConnection() override = default;
+    ~NodeConnection() override;
 
 private:
     Napi::Value InitAsync(const Napi::CallbackInfo& info);
@@ -40,6 +40,7 @@ private:
     Napi::Value CreateArrowRelTableSync(const Napi::CallbackInfo& info);
     Napi::Value DropArrowTableSync(const Napi::CallbackInfo& info);
     void Close(const Napi::CallbackInfo& info);
+    void ReleaseDatabase() override;
 
 private:
     std::shared_ptr<Database> database;

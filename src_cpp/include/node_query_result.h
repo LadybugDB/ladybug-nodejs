@@ -2,6 +2,7 @@
 
 #include "binder/bound_statement_result.h"
 #include "main/lbug.h"
+#include "node_database.h"
 #include "node_util.h"
 #include "planner/operator/logical_plan.h"
 #include "processor/result/factorized_table.h"
@@ -12,7 +13,7 @@
 using namespace lbug::processor;
 using namespace lbug::main;
 
-class NodeQueryResult : public Napi::ObjectWrap<NodeQueryResult> {
+class NodeQueryResult : public Napi::ObjectWrap<NodeQueryResult>, public DatabaseDependent {
     friend class NodeQueryResultGetNextAsyncWorker;
     friend class NodeQueryResultGetColumnMetadataAsyncWorker;
     friend class NodeQueryResultGetNextQueryResultAsyncWorker;
@@ -47,6 +48,7 @@ private:
     void PopulateColumnNames();
     void Close(const Napi::CallbackInfo& info);
     void Close();
+    void ReleaseDatabase() override;
     QueryResult& GetQueryResult() const;
     void AcquireAsyncUse();
     void ReleaseAsyncUse();

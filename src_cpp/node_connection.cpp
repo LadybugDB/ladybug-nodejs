@@ -123,6 +123,21 @@ NodeConnection::NodeConnection(const Napi::CallbackInfo& info)
     Napi::HandleScope scope(env);
     NodeDatabase* nodeDatabase = Napi::ObjectWrap<NodeDatabase>::Unwrap(info[0].As<Napi::Object>());
     database = nodeDatabase->database;
+    if (database) {
+        DatabaseDependent::Register(database.get(), this);
+    }
+}
+
+NodeConnection::~NodeConnection() {
+    ReleaseDatabase();
+}
+
+void NodeConnection::ReleaseDatabase() {
+    if (database) {
+        DatabaseDependent::Unregister(database.get(), this);
+    }
+    connection.reset();
+    database.reset();
 }
 
 Napi::Value NodeConnection::InitAsync(const Napi::CallbackInfo& info) {
@@ -176,8 +191,7 @@ void NodeConnection::SetQueryTimeout(const Napi::CallbackInfo& info) {
 void NodeConnection::Close(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     Napi::HandleScope scope(env);
-    this->connection.reset();
-    this->database.reset();
+    ReleaseDatabase();
 }
 
 Napi::Value NodeConnection::ExecuteAsync(const Napi::CallbackInfo& info) {
