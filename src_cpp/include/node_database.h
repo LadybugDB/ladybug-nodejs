@@ -8,6 +8,21 @@
 
 using namespace lbug::main;
 
+// A native object that keeps a Database alive (a connection or a query result). The registry
+// lets NodeDatabase::Close release the ones that are still around, including those whose JS
+// wrapper was garbage-collected but not finalized yet, so that the database is destroyed on
+// close() instead of whenever the last finalizer runs.
+class DatabaseDependent {
+public:
+    virtual ~DatabaseDependent() = default;
+    static void Register(Database* database, DatabaseDependent* dependent);
+    static void Unregister(Database* database, DatabaseDependent* dependent);
+    static void ReleaseAll(Database* database);
+
+private:
+    virtual void ReleaseDatabase() = 0;
+};
+
 class NodeDatabase : public Napi::ObjectWrap<NodeDatabase> {
     friend class NodeConnection;
     friend class DatabaseInitAsyncWorker;

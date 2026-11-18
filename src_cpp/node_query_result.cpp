@@ -59,10 +59,16 @@ void NodeQueryResult::AdoptQueryResult(
         std::unique_ptr<QueryResult> queryResult, std::shared_ptr<Connection> connection,
         std::shared_ptr<Database> database) {
     ThrowIfAsyncOperationInFlight("replace");
+    if (this->database) {
+        DatabaseDependent::Unregister(this->database.get(), this);
+    }
     columnNames.reset();
     ownedQueryResult = std::move(queryResult);
     this->connection = std::move(connection);
     this->database = std::move(database);
+    if (this->database) {
+        DatabaseDependent::Register(this->database.get(), this);
+    }
 }
 
 std::unique_ptr<QueryResult> NodeQueryResult::DetachNextQueryResult() {
@@ -336,7 +342,18 @@ void NodeQueryResult::Close(const Napi::CallbackInfo& info) {
     }
 }
 
+void NodeQueryResult::ReleaseDatabase() {
+    // A result with an async operation in flight is being read by a worker thread: leave it.
+    // It still holds the database, which is then destroyed when the result is closed.
+    if (activeAsyncUses.load(std::memory_order_acquire) == 0) {
+        Close();
+    }
+}
+
 void NodeQueryResult::Close() {
+    if (database) {
+        DatabaseDependent::Unregister(database.get(), this);
+    }
     columnNames.reset();
     ownedQueryResult.reset();
     connection.reset();

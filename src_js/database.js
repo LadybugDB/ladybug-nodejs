@@ -86,6 +86,34 @@ class Database {
     this._isInitialized = false;
     this._initPromise = null;
     this._isClosed = false;
+    // Connections opened on this database, so that close() can close them.
+    // They are held weakly: a connection that goes out of scope must still be
+    // garbage-collected.
+    this._openConnections = new Set();
+    this._connectionFinalizer = new FinalizationRegistry((ref) => {
+      this._openConnections.delete(ref);
+    });
+  }
+
+  /**
+   * Internal function to track an open connection.
+   * @param {lbug.Connection} connection the connection.
+   * @returns {WeakRef} the handle to pass to `_untrackConnection`.
+   */
+  _trackConnection(connection) {
+    const ref = new WeakRef(connection);
+    this._openConnections.add(ref);
+    this._connectionFinalizer.register(connection, ref, ref);
+    return ref;
+  }
+
+  /**
+   * Internal function to stop tracking a closed connection.
+   * @param {WeakRef} ref the handle returned by `_trackConnection`.
+   */
+  _untrackConnection(ref) {
+    this._openConnections.delete(ref);
+    this._connectionFinalizer.unregister(ref);
   }
 
   /**
@@ -176,7 +204,8 @@ class Database {
   }
 
   /**
-   * Close the database.
+   * Close the database. Connections and query results that are still open
+   * are closed with it, so the database is released when this returns.
    */
   async close() {
     if (this._isClosed) {
@@ -195,13 +224,17 @@ class Database {
       }
     }
     // Database is initialized, close it.
+    for (const ref of [...this._openConnections]) {
+      await ref.deref()?.close();
+    }
     this._database.close();
     delete this._database;
     this._isClosed = true;
   }
 
   /**
-   * Close the database synchronously.
+   * Close the database synchronously. Connections and query results that are
+   * still open are closed with it.
    * @throws {Error} if there is an ongoing asynchronous initialization.
    */
   closeSync() {
@@ -217,6 +250,9 @@ class Database {
         delete this._database;
         return;
       }
+    }
+    for (const ref of [...this._openConnections]) {
+      ref.deref()?.closeSync();
     }
     this._database.close();
     delete this._database;

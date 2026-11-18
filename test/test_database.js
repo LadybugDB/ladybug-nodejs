@@ -569,6 +569,33 @@ describe("Database close", function () {
     assert.isTrue(testDb._isClosed);
   });
 
+  it("should release the database on close while a connection and a query result are still open", async function () {
+    if (process.platform === "win32") {
+      this._runnable.title += " (skipped: not implemented on Windows)";
+      this.skip();
+    }
+    const tmpDbPath = await new Promise((resolve, reject) => {
+      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
+        if (err) {
+          return reject(err);
+        }
+        return resolve(path);
+      });
+    });
+    const dbPath = path.join(tmpDbPath, "db.lbdb");
+    const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
+    const conn = new lbug.Connection(testDb);
+    const res = await conn.query("RETURN 1");
+    await testDb.close();
+    // The lock on the database file is only released when the native database is destroyed.
+    const subProcessResult = await openDatabaseOnSubprocess(dbPath);
+    assert.isEmpty(subProcessResult.stderr);
+    assert.equal(subProcessResult.code, 0);
+    assert.include(subProcessResult.stdout, "Database initialized.");
+    assert.isTrue(conn._isClosed);
+    assert.throws(() => res.getNumTuples(), "Query result is closed.");
+  });
+
   it("should not crash when file-backed async query results are discarded before close", async function () {
     const tmpDbPath = await new Promise((resolve, reject) => {
       tmp.dir({ unsafeCleanup: true }, (err, path, _) => {

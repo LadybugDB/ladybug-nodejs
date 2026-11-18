@@ -1,5 +1,48 @@
 #include "include/node_database.h"
 
+#include <mutex>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace {
+// Query results register from the worker thread that produced them.
+std::mutex dependentsMtx;
+std::unordered_map<Database*, std::unordered_set<DatabaseDependent*>> dependents;
+} // namespace
+
+void DatabaseDependent::Register(Database* database, DatabaseDependent* dependent) {
+    std::lock_guard lck{dependentsMtx};
+    dependents[database].insert(dependent);
+}
+
+void DatabaseDependent::Unregister(Database* database, DatabaseDependent* dependent) {
+    std::lock_guard lck{dependentsMtx};
+    auto it = dependents.find(database);
+    if (it == dependents.end()) {
+        return;
+    }
+    it->second.erase(dependent);
+    if (it->second.empty()) {
+        dependents.erase(it);
+    }
+}
+
+void DatabaseDependent::ReleaseAll(Database* database) {
+    std::unordered_set<DatabaseDependent*> toRelease;
+    {
+        std::lock_guard lck{dependentsMtx};
+        auto it = dependents.find(database);
+        if (it == dependents.end()) {
+            return;
+        }
+        toRelease = std::move(it->second);
+        dependents.erase(it);
+    }
+    for (auto* dependent : toRelease) {
+        dependent->ReleaseDatabase();
+    }
+}
+
 Napi::Object NodeDatabase::Init(Napi::Env env, Napi::Object exports) {
     Napi::HandleScope scope(env);
 
@@ -131,6 +174,9 @@ void NodeDatabase::InitCppDatabase() {
 void NodeDatabase::Close(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     Napi::HandleScope scope(env);
+    if (database) {
+        DatabaseDependent::ReleaseAll(database.get());
+    }
     database.reset();
 }
 

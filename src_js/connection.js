@@ -27,6 +27,7 @@ class Connection {
     this._isInitialized = false;
     this._initPromise = null;
     this._isClosed = false;
+    this._trackingRef = database._trackConnection(this);
     numThreads = parseInt(numThreads);
     if (numThreads && numThreads > 0) {
       this._numThreads = numThreads;
@@ -611,6 +612,7 @@ class Connection {
         this._isInitialized = true;
         this._isClosed = true;
         delete this._connection;
+        this._database._untrackConnection(this._trackingRef);
         return;
       }
     }
@@ -618,6 +620,7 @@ class Connection {
     this._connection.close();
     delete this._connection;
     this._isClosed = true;
+    this._database._untrackConnection(this._trackingRef);
   }
 
   /**
@@ -635,11 +638,13 @@ class Connection {
       this._isInitialized = true;
       this._isClosed = true;
       delete this._connection;
+      this._database._untrackConnection(this._trackingRef);
       return;
     }
     this._connection.close();
     delete this._connection;
     this._isClosed = true;
+    this._database._untrackConnection(this._trackingRef);
   }
 }
 
